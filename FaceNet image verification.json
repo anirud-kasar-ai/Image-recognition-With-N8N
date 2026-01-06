@@ -1,0 +1,572 @@
+{
+  "name": "FaceNet image verification",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -768,
+        176
+      ],
+      "id": "6a199689-3ac0-4f62-8076-27032c650be2",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "queryString": ".jpg",
+        "filter": {
+          "folderId": {
+            "__rl": true,
+            "value": "1v7NXbs9jwLHJwJDeWohLCB9Z-tSlYj2q",
+            "mode": "list",
+            "cachedResultName": "n8n Image Verification",
+            "cachedResultUrl": "https://drive.google.com/drive/folders/1v7NXbs9jwLHJwJDeWohLCB9Z-tSlYj2q"
+          }
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -592,
+        -16
+      ],
+      "id": "0246a3a2-101d-413e-a4a3-5cc3dbccc031",
+      "name": "Search files and folders",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "p1mJkqWr8nFPTB49",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.containers.internal:3000/represent",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"img_path\": \"data:image/jpeg;base64,{{$json.img_base64}}\",\n  \"model_name\": \"Facenet512\",\n  \"detector_backend\": \"retinaface\"\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        32,
+        -16
+      ],
+      "id": "4685eb0d-c0bd-400c-a417-ad0e8e598639",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://facenet-xboae97.svc.aped-4627-b74a.pinecone.io/vectors/upsert",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Api-Key",
+              "value": "pcsk_55eFSF_AMNeYp3bQhgDZdDYRe8KwrpmMqJNaM4VVdGGzCbnP24GRHsF7uRKHSc5pBZrjQS"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        400,
+        -16
+      ],
+      "id": "9c855866-667b-45b0-8edc-eca4a9575b48",
+      "name": "Pinecone Upsert"
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map((item, index) => {\n  const embedding =\n    item.json.results?.[0]?.embedding;\n\n  if (!embedding) {\n    throw new Error(`No embedding found for item ${index}`);\n  }\n\n  return {\n    json: {\n      namespace: 'faces',\n      vectors: [\n        {\n          id: `face_${index}`,\n          values: embedding,\n          metadata: {\n            subject: `face_${index}`\n          }\n        }\n      ]\n    }\n  };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        -16
+      ],
+      "id": "d1636457-808b-4354-8b00-58c53d463c98",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c7dcb770-31f6-43c8-99d1-ac32bd1644e2",
+              "leftValue": "={{ $json.matches.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            },
+            {
+              "id": "37322ea7-c41f-41ab-b4cc-b29d32970d54",
+              "leftValue": "={{ $json.matches[0].score }}",
+              "rightValue": 0.7,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        560,
+        176
+      ],
+      "id": "cda8e268-4889-4df8-bc3e-08d7ae8327e8",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8239ae80-4b87-40a6-b65f-a2e90226f4c4",
+              "name": "status",
+              "value": "recognized",
+              "type": "string"
+            },
+            {
+              "id": "b51588ed-82b0-4ce9-b874-348a2f124806",
+              "name": "id",
+              "value": "={{ $json.matches[0].id }}",
+              "type": "string"
+            },
+            {
+              "id": "79486eab-98bc-40e0-9d62-3f0d8296923c",
+              "name": "subject",
+              "value": "={{ $json.matches[0].metadata.subject }}",
+              "type": "string"
+            },
+            {
+              "id": "4b1b4cda-e7cd-44db-bc69-a54fb619acc8",
+              "name": "score",
+              "value": "={{ $json.matches[0].score }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        816,
+        112
+      ],
+      "id": "56252497-8ca2-4ea7-94ce-ffb597d24b7d",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nreturn items.map(item => {\n  const binaryKey = Object.keys(item.binary || {})[0];\n\n  if (!binaryKey) {\n    throw new Error(\"No binary key found in item.binary\");\n  }\n\n  const base64 = item.binary[binaryKey].data.toString('base64');\n\n  return {\n    json: {\n      img_base64: base64,\n      fileName: item.json.name,\n      mimeType: item.json.mimeType || \"image/jpeg\"\n    }\n  };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -192,
+        -16
+      ],
+      "id": "fd7fdac5-3333-4762-b4b6-1cda0c7d5f75",
+      "name": "Code in JavaScript2"
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "1LK8jtMywTnhwLuhNor-PYt3XSBpXM1cU",
+          "mode": "list",
+          "cachedResultName": "test 1.jpg",
+          "cachedResultUrl": "https://drive.google.com/file/d/1LK8jtMywTnhwLuhNor-PYt3XSBpXM1cU/view?usp=drivesdk"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -544,
+        176
+      ],
+      "id": "c326833a-daf9-467a-971c-4dc544d0a850",
+      "name": "Download file1",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "p1mJkqWr8nFPTB49",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.containers.internal:3000/represent",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"img_path\": \"data:image/jpeg;base64,{{$json.img_base64}}\",\n  \"model_name\": \"Facenet512\",\n  \"detector_backend\": \"retinaface\"\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -144,
+        176
+      ],
+      "id": "f98bce4d-cc98-4f4c-9648-c357858b230f",
+      "name": "HTTP Request1"
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map((item, index) => {\n  const embedding =\n    item.json.results?.[0]?.embedding;\n\n  if (!embedding) {\n    throw new Error(`No embedding found for item ${index}`);\n  }\n\n  return {\n    json: {\n      namespace: 'faces',\n      vectors: [\n        {\n          id: `face_${index}`,\n          values: embedding,\n          metadata: {\n            subject: `face_${index}`\n          }\n        }\n      ]\n    }\n  };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        48,
+        176
+      ],
+      "id": "3a48d613-46a4-4105-aff7-e1715b5a5234",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.item;\n\nconst binKey = Object.keys(item.binary || {})[0];\n\nif (!binKey) {\n  throw new Error(\"No binary data found\");\n}\n\nconst base64 = item.binary[binKey].data.toString('base64');\n\nreturn {\n  img_base64: base64\n};\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -352,
+        176
+      ],
+      "id": "3fb7a6b1-fcac-473c-9799-a40f423131dc",
+      "name": "Code in JavaScript3"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = items[0];\n\nconst vector = item.json.vectors[0].values;\n\nif (!vector || !Array.isArray(vector)) {\n  throw new Error(\"Vector not found or invalid\");\n}\n\nreturn [\n  {\n    json: {\n      vector,\n      namespace: \"faces\",\n      topK: 1,\n      includeMetadata: true\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        176
+      ],
+      "id": "6d116cd4-db8e-45ef-9676-37ed627a3080",
+      "name": "Code in JavaScript4"
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -352,
+        -16
+      ],
+      "id": "6228e0ee-4718-498d-adef-75b118a95dd4",
+      "name": "Download file",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "p1mJkqWr8nFPTB49",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://facenet-xboae97.svc.aped-4627-b74a.pinecone.io/query",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Api-Key",
+              "value": "pcsk_55eFSF_AMNeYp3bQhgDZdDYRe8KwrpmMqJNaM4VVdGGzCbnP24GRHsF7uRKHSc5pBZrjQS"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "body": "={{ JSON.stringify({   namespace: \"faces\",   vector: $json.vector,   topK: 1,   includeMetadata: true }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        384,
+        176
+      ],
+      "id": "3cd91c14-65e6-4899-a565-261be434a6a5",
+      "name": "Pinecone Query"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8239ae80-4b87-40a6-b65f-a2e90226f4c4",
+              "name": "status",
+              "value": "Not-recognized",
+              "type": "string"
+            },
+            {
+              "id": "b51588ed-82b0-4ce9-b874-348a2f124806",
+              "name": "id",
+              "value": "={{ $json.matches[0].id }}",
+              "type": "string"
+            },
+            {
+              "id": "79486eab-98bc-40e0-9d62-3f0d8296923c",
+              "name": "subject",
+              "value": "={{ $json.matches[0].metadata.subject }}",
+              "type": "string"
+            },
+            {
+              "id": "4b1b4cda-e7cd-44db-bc69-a54fb619acc8",
+              "name": "score",
+              "value": "={{ $json.matches[0].score }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        816,
+        256
+      ],
+      "id": "599c8452-b967-4993-8f7b-a2dd0cd6740c",
+      "name": "Edit Fields1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Download file1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search files and folders": {
+      "main": [
+        [
+          {
+            "node": "Download file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Pinecone Upsert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Edit Fields1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pinecone Upsert": {
+      "main": [
+        []
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download file1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript3": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript4": {
+      "main": [
+        [
+          {
+            "node": "Pinecone Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download file": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pinecone Query": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "9953a125-f6ab-4a1c-84e8-3ebfc3bebe87",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "70bdf25756d2619e1b55a4fa90bbea7809f9df331bd320b669e529c5c1fe0d34"
+  },
+  "id": "UbGweVqNj2e80XiC",
+  "tags": []
+}
